@@ -4,13 +4,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -26,7 +25,7 @@ import com.restfb.types.Page;
 import com.restfb.types.User;
 
 public class RecommendationManager {
-	private static final String MY_ACCESS_TOKEN = "CAACEdEose0cBAKZBwxv44tGvqWjZCzKpgJL0BLjII0M1FseAYCQhZAsSlmHISRwEDi6PwZBNCc3vK7dITYo5fQKgIwMttMSTXRGEDRutSOpJgMw2FzNEMFq7sfCisicaHZArJiuxoc8hp9YORvbthiiDA0cliNkEAJZAuetRPgzuIgqoQyLObgVwsYImTbMDAZD";
+	private static final String MY_ACCESS_TOKEN = "CAACEdEose0cBACa6PT5cLZBkcIYQRjN9BZAQaFN8t3Rjaac67hrbYbwPYYyXGJAK8tINbV708cyYZCZBcfezqlISL9qZBhw22jChOXBMXvPz2qsnE6v96OOxtTZA1dNNqN8QOZA7ZAqBCGvhNGDMdL9rOmLWVDzGPI1QAn1SOPjeaEzmqrD6ZAUAOQKZB20V1vOKgZD";
 
 	private static final String MY_APP_ID = "546304538782137";
 	private static final String MY_APP_SECRET = "886e09ec9d680c328fe97df1836c83ff";
@@ -95,6 +94,8 @@ public class RecommendationManager {
 				count++;
 		}
 
+		System.out.println("Movie count: " + movieCount.get());
+
 		return new ArrayList<String>(movieNamesSet);
 	}
 
@@ -141,6 +142,91 @@ public class RecommendationManager {
 		public long score = 0L;
 	}
 
+	private AtomicInteger movieCount = new AtomicInteger(0);
+
+	private Map<Long, Recommendation> recosMapForFriend(User friend,
+			final Map<String, Integer> commonPageFriendsMap) {
+
+		String friendGender = friend.getGender();
+		String userGender = user.getGender();
+
+		boolean hasGender = (friendGender != null) && (userGender != null);
+
+		/*
+		 * Fetching movie list of friends with whom I have common movies
+		 */
+		Connection<Page> friendsMoviesConn = null;
+
+		try {
+			friendsMoviesConn = fbClient.fetchConnection(friend.getId()
+					+ "/movies", Page.class,
+					Parameter.with("fields", "id,name"));
+		} catch (FacebookNetworkException e) {
+			// TODO: this exception occurs for many users
+			// System.out.println(friendsMap.get(id).getName());
+			// e.printStackTrace();
+			return null;
+		}
+
+		List<String> friendMovieNamesList = new ArrayList<String>();
+		for (Page friendMoviePage : friendsMoviesConn.getData()) {
+			friendMovieNamesList.add(friendMoviePage.getName());
+		}
+
+		List<Movie> friendMoviesList = MovieManager.getInstance()
+				.getMoviesByNameIn(friendMovieNamesList);
+		if (friendMoviesList == null || friendMoviesList.isEmpty())
+			return null;
+
+		ConcurrentHashMap<Long, Recommendation> movieRecommendationMap = new ConcurrentHashMap<Long, RecommendationManager.Recommendation>();
+
+		Integer numberOfCommonLikes = commonPageFriendsMap.get(friend.getId());
+		if (numberOfCommonLikes == null)
+			numberOfCommonLikes = 0;
+
+		for (Movie movie : friendMoviesList) {
+			movieCount.getAndIncrement();
+
+			if (movie.getYear() < 1994)
+				continue;
+
+			Recommendation reco = new Recommendation();
+			reco.movie = movie;
+
+			Recommendation oldRecommendation = movieRecommendationMap
+					.putIfAbsent(movie.getMovieId(), reco);
+
+			if (oldRecommendation != null)
+				reco = oldRecommendation;
+
+			// If this friend and user has a few number of common
+			// likes
+			// give it some more weight
+			reco.score += (numberOfCommonLikes * 5L + 10L);
+
+			// Adding weight if the movie belongs to a genre
+			// of movies that user likes
+			if (movie.genreSet != null) {
+				movie.genreSet.retainAll(genreToCountMap.keySet());
+				if (!movie.genreSet.isEmpty()) {
+					for (Long genre : movie.genreSet)
+						reco.score += 10L;
+				}
+			}
+
+			// Considering friends gender too! I think it matters
+			// for movies
+			if (hasGender && friendGender.equals(userGender))
+				reco.score += 10L;
+
+			if (reco != null)
+				movieRecommendationMap.put(movie.getMovieId(), reco);
+
+		}
+
+		return movieRecommendationMap;
+	}
+
 	private Map<Long, Recommendation> recommendFromFriends(
 			final Map<String, Integer> commonPageFriendsMap) {
 		/* Fetching movies liked by friends */
@@ -153,77 +239,20 @@ public class RecommendationManager {
 
 		final Lock lock = new ReentrantLock();
 
-		for (final String id : friendsMap.keySet()) {
+		for (final String friendId : friendsMap.keySet()) {
 
 			Thread t = new Thread(new Runnable() {
-				final String friendName = friendsMap.get(id).getName();
+				final User friend = friendsMap.get(friendId);
 
 				@Override
 				public void run() {
-					ConcurrentHashMap<Long, Recommendation> movieRecommendationMap = new ConcurrentHashMap<Long, RecommendationManager.Recommendation>();
 
-					/*
-					 * Fetching movie list of friends with whom I have common
-					 * movies
-					 */
-					Connection<Page> friendsMoviesConn = null;
+					Map<Long, Recommendation> movieRecommendationMap = recosMapForFriend(
+							friend, commonPageFriendsMap);
 
-					FacebookClient fbClient = new DefaultFacebookClient(
-							RecommendationManager.MY_ACCESS_TOKEN);
+					if(movieRecommendationMap == null || movieRecommendationMap.isEmpty())
+						return;
 					
-					try {
-						friendsMoviesConn = fbClient.fetchConnection(id
-								+ "/movies", Page.class,
-								Parameter.with("fields", "id,name"));
-					} catch (FacebookNetworkException e) {
-						// TODO: this exception occurs for many users
-						// System.out.println(friendsMap.get(id).getName());
-						// e.printStackTrace();
-						return;
-					}
-
-					List<String> friendMovieNamesList = new ArrayList<String>();
-					for (Page friendMoviePage : friendsMoviesConn.getData()) {
-						friendMovieNamesList.add(friendMoviePage.getName());
-					}
-
-					List<Movie> friendMoviesList = MovieManager.getInstance()
-							.getMoviesByNameIn(friendMovieNamesList);
-					if (friendMoviesList == null || friendMoviesList.isEmpty())
-						return;
-
-					Integer numberOfCommonLikes = commonPageFriendsMap.get(id);
-					if (numberOfCommonLikes == null)
-						numberOfCommonLikes = 0;
-
-					for (Movie movie : friendMoviesList) {
-						if (movie.getYear() < 1994)
-							continue;
-
-						Recommendation reco = new Recommendation();
-						reco.movie = movie;
-
-						Recommendation oldRecommendation = movieRecommendationMap
-								.putIfAbsent(movie.getMovieId(), reco);
-
-						if (oldRecommendation != null)
-							reco = oldRecommendation;
-
-						reco.score += (numberOfCommonLikes + 5L + 10L);
-
-						if (movie.genreSet != null) {
-							movie.genreSet.retainAll(genreToCountMap.keySet());
-							if (!movie.genreSet.isEmpty()) {
-								for (Long genre : movie.genreSet)
-									reco.score += (10L);// * genreToCountMap
-								// .get(genre));
-							}
-						}
-
-						if (reco != null)
-							movieRecommendationMap.put(movie.getMovieId(), reco);
-
-					}
 					lock.lock();
 					try {
 						recommendationsList.add(movieRecommendationMap);
@@ -249,7 +278,7 @@ public class RecommendationManager {
 		for (Map<Long, Recommendation> recoMap : recommendationsList) {
 			for (Long key : recoMap.keySet()) {
 				Recommendation newThreadReco = recoMap.get(key);
-				
+
 				Recommendation reco = finalRecommendationMap
 						.get(newThreadReco.movie.getMovieId());
 
@@ -269,7 +298,7 @@ public class RecommendationManager {
 
 		/* Fetching user friends list */
 		Connection<User> friends = fbClient.fetchConnection("me/friends",
-				User.class, Parameter.with("fields", "id,name"));
+				User.class, Parameter.with("fields", "name,gender,birthday"));
 		friendsMap = new HashMap<String, User>();
 		for (User friend : friends.getData())
 			friendsMap.put(friend.getId(), friend);

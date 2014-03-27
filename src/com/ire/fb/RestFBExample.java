@@ -35,6 +35,7 @@ public class RestFBExample {
 		public String uid;
 	}
 
+
 	public static void main(String[] args) {
 		// final FacebookClient fbClient = new DefaultFacebookClient();
 		// FacebookClient.AccessToken accessToken =
