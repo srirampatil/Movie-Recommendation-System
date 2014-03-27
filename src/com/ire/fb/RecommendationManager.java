@@ -42,7 +42,6 @@ public class RecommendationManager {
 	}
 
 	private void fetchUserInfo() {
-		System.out.println("Fetching user info");
 		/* Fetching user information */
 		user = fbClient.fetchObject("me", User.class);
 	}
@@ -163,8 +162,8 @@ public class RecommendationManager {
 					Parameter.with("fields", "id,name"));
 		} catch (FacebookNetworkException e) {
 			// TODO: this exception occurs for many users
-			// System.out.println(friendsMap.get(id).getName());
-			// e.printStackTrace();
+//			System.out.println(friend.getName());
+			e.printStackTrace();
 			return null;
 		}
 
