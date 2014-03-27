@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -30,17 +31,19 @@ public class RecommendationManager {
 	/* Copy and paste the access token from developers.facebook.com graph explorer
 	 * It get invalidated after every half hour or so. :D
 	 */
-	private static final String MY_ACCESS_TOKEN = "CAACEdEose0cBAPJtE6pCqI7k2uREugqGuih5VlKO3kZBXcc4UZAoWZB5VWKnvKXukFrp6RT39ZBZBDVicY0xvw0O8MWlxIXkeRjgcjQlLX7dpZAiKZCPKKY5MvMnCnVFYvGVWllK84RflconLY5EURfbYdWvz6oL0D2iWuI60clMaz1rzr3IhdpUseCyL5TUI4ZD";
+	private static final String MY_ACCESS_TOKEN = "CAACEdEose0cBALsjY6OZCbAQ26HbZBIF9W4EWIrdzeJ1l1pahLvXcrLuzY6a3WeWolfx1SZCelxS25L58ZAZBoKuEXPMLpRY8ZAPuwJqBhY7rtFfWE7hA2cWNJN6TLkIPTR08ihxey9UlR76ySk9W13NyPpWWBxZCqXxPjuAv4ix12KGhfWuQ5pnwTzqhcfuy8ZD";
 
 	private FacebookClient fbClient = null;
 	private User user = null;
 	private Map<Long, Movie> myMoviesMap = null;
 	private Map<Long, Long> genreToCountMap = null;
 	private Map<String, User> friendsMap = null;
+	private Set<String> myMovieNamesSet;
 
 	public RecommendationManager() {
 		fbClient = new DefaultFacebookClient(
 				RecommendationManager.MY_ACCESS_TOKEN);
+		myMovieNamesSet = new HashSet<String>();
 	}
 
 	private void fetchUserInfo() {
@@ -121,6 +124,9 @@ public class RecommendationManager {
 		for (Movie movie : moviesList) {
 			myMoviesMap.put(movie.getMovieId(), movie);
 
+			// To check the dplicates later
+			myMovieNamesSet.add(movie.getMovieName());
+			
 			String[] splits = movie.getGenreIdsStr().split(" ");
 			for (String genreStr : splits) {
 				if (genreStr != null && genreStr.length() > 0) {
@@ -196,7 +202,7 @@ public class RecommendationManager {
 		for (Movie movie : friendMoviesList) {
 			movieCount.getAndIncrement();
 
-			if (movie.getYear() < 1994)
+			if(myMovieNamesSet.contains(movie.getMovieName()))
 				continue;
 
 			Recommendation reco = new Recommendation();
@@ -218,15 +224,15 @@ public class RecommendationManager {
 			if (movie.genreSet != null) {
 				movie.genreSet.retainAll(genreToCountMap.keySet());
 				if (!movie.genreSet.isEmpty()) {
-					for (Long genre : movie.genreSet)
-						reco.score += 10L;
+					for (Long genreId : movie.genreSet)
+						reco.score += (10L * genreToCountMap.get(genreId));
 				}
 			}
 
 			// Considering friends gender too! I think it matters
 			// for movies
 			if (hasGender && friendGender.equals(userGender))
-				reco.score += 10L;
+				reco.score += 5L;
 
 			if (reco != null)
 				movieRecommendationMap.put(movie.getMovieId(), reco);
