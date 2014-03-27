@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -25,10 +26,11 @@ import com.restfb.types.Page;
 import com.restfb.types.User;
 
 public class RecommendationManager {
-	private static final String MY_ACCESS_TOKEN = "CAACEdEose0cBACa6PT5cLZBkcIYQRjN9BZAQaFN8t3Rjaac67hrbYbwPYYyXGJAK8tINbV708cyYZCZBcfezqlISL9qZBhw22jChOXBMXvPz2qsnE6v96OOxtTZA1dNNqN8QOZA7ZAqBCGvhNGDMdL9rOmLWVDzGPI1QAn1SOPjeaEzmqrD6ZAUAOQKZB20V1vOKgZD";
-
-	private static final String MY_APP_ID = "546304538782137";
-	private static final String MY_APP_SECRET = "886e09ec9d680c328fe97df1836c83ff";
+	
+	/* Copy and paste the access token from developers.facebook.com graph explorer
+	 * It get invalidated after every half hour or so. :D
+	 */
+	private static final String MY_ACCESS_TOKEN = "CAACEdEose0cBAPJtE6pCqI7k2uREugqGuih5VlKO3kZBXcc4UZAoWZB5VWKnvKXukFrp6RT39ZBZBDVicY0xvw0O8MWlxIXkeRjgcjQlLX7dpZAiKZCPKKY5MvMnCnVFYvGVWllK84RflconLY5EURfbYdWvz6oL0D2iWuI60clMaz1rzr3IhdpUseCyL5TUI4ZD";
 
 	private FacebookClient fbClient = null;
 	private User user = null;
@@ -161,10 +163,18 @@ public class RecommendationManager {
 					+ "/movies", Page.class,
 					Parameter.with("fields", "id,name"));
 		} catch (FacebookNetworkException e) {
-			// TODO: this exception occurs for many users
-//			System.out.println(friend.getName());
-			e.printStackTrace();
-			return null;
+			/* The proxy server returns 403 forbidden error if this is removed.
+			 * I guess it reaches the maximum limit for number of requests within
+			 * a given time period. So this sleep for random number of milli-seconds
+			 * works like a charm :)
+			 */
+			try {
+				Random random = new Random();
+				Thread.sleep(random.nextInt(500) + 300);
+			} catch (InterruptedException e1) {
+				e1.printStackTrace();
+			}
+			return recosMapForFriend(friend, commonPageFriendsMap);
 		}
 
 		List<String> friendMovieNamesList = new ArrayList<String>();
