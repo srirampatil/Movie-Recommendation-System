@@ -18,20 +18,28 @@ import java.util.concurrent.locks.ReentrantLock;
 import com.ire.db.Movie;
 import com.ire.db.MovieManager;
 import com.ire.fb.RestFBExample.FqlFriendID;
+import com.restfb.BinaryAttachment;
 import com.restfb.Connection;
 import com.restfb.DefaultFacebookClient;
+import com.restfb.DefaultJsonMapper;
 import com.restfb.FacebookClient;
+import com.restfb.JsonMapper;
 import com.restfb.Parameter;
+import com.restfb.batch.BatchRequest;
+import com.restfb.batch.BatchRequest.BatchRequestBuilder;
+import com.restfb.batch.BatchResponse;
 import com.restfb.exception.FacebookNetworkException;
+import com.restfb.json.JsonObject;
 import com.restfb.types.Page;
 import com.restfb.types.User;
 
 public class RecommendationManager {
-	
-	/* Copy and paste the access token from developers.facebook.com graph explorer
-	 * It get invalidated after every half hour or so. :D
+
+	/*
+	 * Copy and paste the access token from developers.facebook.com graph
+	 * explorer It get invalidated after every half hour or so. :D
 	 */
-	private static final String MY_ACCESS_TOKEN = "CAACEdEose0cBALsjY6OZCbAQ26HbZBIF9W4EWIrdzeJ1l1pahLvXcrLuzY6a3WeWolfx1SZCelxS25L58ZAZBoKuEXPMLpRY8ZAPuwJqBhY7rtFfWE7hA2cWNJN6TLkIPTR08ihxey9UlR76ySk9W13NyPpWWBxZCqXxPjuAv4ix12KGhfWuQ5pnwTzqhcfuy8ZD";
+	private static final String MY_ACCESS_TOKEN = "CAACEdEose0cBABcVrwGeyMzmTDZCx8IH3R08UEZClF0asYHdtem7eQbzZC6MBzmmuOfZCKbHonNzX2Lhjuv6UwxjONFZBPNpH3Dm7DwhZALsiNKTYopZBymTSBqCi6Yq7U2hYLzRdJw63Fb56Ol3ATvhLA4327HEScZAYGFSIs9dDKosbNwySI44AEDSkSpAr80QucCHSqqFCwZDZD";
 
 	private FacebookClient fbClient = null;
 	private User user = null;
@@ -46,22 +54,37 @@ public class RecommendationManager {
 		myMovieNamesSet = new HashSet<String>();
 	}
 
-	private void fetchUserInfo() {
-		/* Fetching user information */
-		user = fbClient.fetchObject("me", User.class);
+	private void parseUserInfo(String jsonString, JsonMapper mapper) {
+		user = mapper.toJavaObject(jsonString, User.class);
+	}
+
+	private List<BatchResponse> fetchUserRelatedInfo() {
+		BatchRequest meRequest = new BatchRequestBuilder("me").build();
+		BatchRequest friendsRequest = new BatchRequestBuilder("me/friends")
+				.parameters(Parameter.with("fields", "name,gender,birthday"))
+				.build();
+		BatchRequest moviesRequest = new BatchRequestBuilder("me/movies")
+				.build();
+
+		return fbClient.executeBatch(meRequest, friendsRequest, moviesRequest);
 	}
 
 	public List<String> buildRecommendationsList(int limit) {
-		fetchUserInfo();
-		fetchFriends();
-		Connection<Page> moviePageList = fetchMovies();
+
+		List<BatchResponse> responseList = fetchUserRelatedInfo();
+
+		JsonMapper mapper = new DefaultJsonMapper();
+		parseUserInfo(responseList.get(0).getBody(), mapper);
+		parseFriends(responseList.get(1).getBody(), mapper);
+		List<Page> moviePageList = parseMovies(responseList.get(2).getBody(),
+				mapper);
 
 		/*
 		 * Fetching friends with common movie likes, eliminating duplicates by
 		 * using set
 		 */
 		HashMap<String, Integer> commonPageFriendsMap = new HashMap<String, Integer>();
-		for (Page moviePage : moviePageList.getData()) {
+		for (Page moviePage : moviePageList) {
 			/* Fetching friends who have liked this page(movie p) */
 			String query = "SELECT uid FROM page_fan WHERE page_id = "
 					+ moviePage.getId()
@@ -103,13 +126,13 @@ public class RecommendationManager {
 		return new ArrayList<String>(movieNamesSet);
 	}
 
-	private synchronized Connection<Page> fetchMovies() {
+	private synchronized List<Page> parseMovies(String jsonString,
+			JsonMapper mapper) {
 		/* Fetching user liked movies list */
-		Connection<Page> moviePageList = fbClient.fetchConnection("me/movies",
-				Page.class);
+		List<Page> moviePageList = mapper.toJavaList(jsonString, Page.class);
 
 		List<String> movieNamesList = new ArrayList<String>();
-		for (Page page : moviePageList.getData())
+		for (Page page : moviePageList)
 			movieNamesList.add(page.getName());
 
 		List<Movie> moviesList = MovieManager.getInstance().getMoviesByNameIn(
@@ -126,7 +149,7 @@ public class RecommendationManager {
 
 			// To check the dplicates later
 			myMovieNamesSet.add(movie.getMovieName());
-			
+
 			String[] splits = movie.getGenreIdsStr().split(" ");
 			for (String genreStr : splits) {
 				if (genreStr != null && genreStr.length() > 0) {
@@ -169,10 +192,11 @@ public class RecommendationManager {
 					+ "/movies", Page.class,
 					Parameter.with("fields", "id,name"));
 		} catch (FacebookNetworkException e) {
-			/* The proxy server returns 403 forbidden error if this is removed.
-			 * I guess it reaches the maximum limit for number of requests within
-			 * a given time period. So this sleep for random number of milli-seconds
-			 * works like a charm :)
+			/*
+			 * The proxy server returns 403 forbidden error if this is removed.
+			 * I guess it reaches the maximum limit for number of requests
+			 * within a given time period. So this sleep for random number of
+			 * milli-seconds works like a charm :)
 			 */
 			try {
 				Random random = new Random();
@@ -200,9 +224,7 @@ public class RecommendationManager {
 			numberOfCommonLikes = 0;
 
 		for (Movie movie : friendMoviesList) {
-			movieCount.getAndIncrement();
-
-			if(myMovieNamesSet.contains(movie.getMovieName()))
+			if (myMovieNamesSet.contains(movie.getMovieName()))
 				continue;
 
 			Recommendation reco = new Recommendation();
@@ -213,6 +235,8 @@ public class RecommendationManager {
 
 			if (oldRecommendation != null)
 				reco = oldRecommendation;
+			else
+				movieCount.getAndIncrement();
 
 			// If this friend and user has a few number of common
 			// likes
@@ -265,9 +289,10 @@ public class RecommendationManager {
 					Map<Long, Recommendation> movieRecommendationMap = recosMapForFriend(
 							friend, commonPageFriendsMap);
 
-					if(movieRecommendationMap == null || movieRecommendationMap.isEmpty())
+					if (movieRecommendationMap == null
+							|| movieRecommendationMap.isEmpty())
 						return;
-					
+
 					lock.lock();
 					try {
 						recommendationsList.add(movieRecommendationMap);
@@ -306,16 +331,14 @@ public class RecommendationManager {
 		return finalRecommendationMap;
 	}
 
-	private synchronized void fetchFriends() {
-		System.out.println("Fetching friends");
+	private synchronized void parseFriends(String jsonString, JsonMapper mapper) {
 		if (friendsMap != null)
 			return;
 
-		/* Fetching user friends list */
-		Connection<User> friends = fbClient.fetchConnection("me/friends",
-				User.class, Parameter.with("fields", "name,gender,birthday"));
+		List<User> friends = mapper.toJavaList(jsonString, User.class);
+
 		friendsMap = new HashMap<String, User>();
-		for (User friend : friends.getData())
+		for (User friend : friends)
 			friendsMap.put(friend.getId(), friend);
 
 		friends = null;
