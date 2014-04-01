@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +38,7 @@ public class RecommendationManager {
 	 * Copy and paste the access token from developers.facebook.com graph
 	 * explorer It get invalidated after every half hour or so. :D
 	 */
-	private static final String MY_ACCESS_TOKEN = "CAACEdEose0cBABcVrwGeyMzmTDZCx8IH3R08UEZClF0asYHdtem7eQbzZC6MBzmmuOfZCKbHonNzX2Lhjuv6UwxjONFZBPNpH3Dm7DwhZALsiNKTYopZBymTSBqCi6Yq7U2hYLzRdJw63Fb56Ol3ATvhLA4327HEScZAYGFSIs9dDKosbNwySI44AEDSkSpAr80QucCHSqqFCwZDZD";
+	private static final String MY_ACCESS_TOKEN = "CAACEdEose0cBAEVatWb23lc2MC64zSeXBBcGaKBSVNNHJinapMk4vLfbG3DRzPE2fdLLkKX3DFu34WqOO63G5wG1dcbaridjhtZB9cooygf01UgQfxTq2gJfwqjgNzJkNgUZBcZCGwu4ZACM4RxVDXC5Rgs1qCEUZAKIyHPWWznDFd7DGZAXfLAjEr9tD52eQZD";
 
 	private FacebookClient fbClient = null;
 	private User user = null;
@@ -139,14 +140,19 @@ public class RecommendationManager {
 	private synchronized List<Page> parseMovies(String jsonString,
 			JsonMapper mapper) {
 		/* Fetching user liked movies list */
-		List<Page> moviePageList = mapper.toJavaList(jsonString, Page.class);
+		List<Page> moviePageList = new ArrayList<Page>(mapper.toJavaList(jsonString, Page.class));
 
-		List<String> movieNamesList = new ArrayList<String>();
-		for (Page page : moviePageList)
-			movieNamesList.add(page.getName());
+		/* Used set here so that duplicate names will not appear */
+		Set<String> movieNamesSet = new HashSet<String>();
+		Iterator<Page> pageIt = moviePageList.iterator();
+		while(pageIt.hasNext()) {
+			Page page = pageIt.next();
+			if(!movieNamesSet.add(page.getName()))
+				pageIt.remove();
+		}
 
-		List<Movie> moviesList = MovieManager.getInstance().getMoviesByNameIn(
-				movieNamesList);
+		List<Movie> movieObjectsList = MovieManager.getInstance().getMoviesByNameIn(
+				new ArrayList(movieNamesSet));
 
 		// If there are multiple movies with the same name all will be
 		// considered. :(
@@ -154,7 +160,7 @@ public class RecommendationManager {
 		Long count;
 		myMoviesMap = new HashMap<Long, Movie>();
 		genreToCountMap = new HashMap<Long, Long>();
-		for (Movie movie : moviesList) {
+		for (Movie movie : movieObjectsList) {
 			myMoviesMap.put(movie.getMovieId(), movie);
 
 			// To check the duplicates later
