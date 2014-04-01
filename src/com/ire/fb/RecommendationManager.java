@@ -17,11 +17,10 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import com.ire.db.Movie;
 import com.ire.db.MovieManager;
-import com.ire.fb.RestFBExample.FqlFriendID;
-import com.restfb.BinaryAttachment;
 import com.restfb.Connection;
 import com.restfb.DefaultFacebookClient;
 import com.restfb.DefaultJsonMapper;
+import com.restfb.Facebook;
 import com.restfb.FacebookClient;
 import com.restfb.JsonMapper;
 import com.restfb.Parameter;
@@ -29,7 +28,6 @@ import com.restfb.batch.BatchRequest;
 import com.restfb.batch.BatchRequest.BatchRequestBuilder;
 import com.restfb.batch.BatchResponse;
 import com.restfb.exception.FacebookNetworkException;
-import com.restfb.json.JsonObject;
 import com.restfb.types.Page;
 import com.restfb.types.User;
 
@@ -47,6 +45,16 @@ public class RecommendationManager {
 	private Map<Long, Long> genreToCountMap = null;
 	private Map<String, User> friendsMap = null;
 	private Set<String> myMovieNamesSet;
+
+	public static class FqlUserID {
+		@Facebook
+		public String uid2;
+	}
+
+	public static class FqlFriendID {
+		@Facebook
+		public String uid;
+	}
 
 	public RecommendationManager() {
 		fbClient = new DefaultFacebookClient(
@@ -83,6 +91,7 @@ public class RecommendationManager {
 		 * Fetching friends with common movie likes, eliminating duplicates by
 		 * using set
 		 */
+
 		HashMap<String, Integer> commonPageFriendsMap = new HashMap<String, Integer>();
 		for (Page moviePage : moviePageList) {
 			/* Fetching friends who have liked this page(movie p) */
@@ -117,7 +126,8 @@ public class RecommendationManager {
 		Set<String> movieNamesSet = new LinkedHashSet<String>();
 		int count = 0;
 		for (int i = 0; count < limit && i < recoList.size(); i++) {
-			if (movieNamesSet.add(recoList.get(i).movie.getMovieName()))
+			if (movieNamesSet.add(recoList.get(i).movie.getMovieName() + " ("
+					+ recoList.get(i).fbUrl + ")"))
 				count++;
 		}
 
@@ -147,7 +157,7 @@ public class RecommendationManager {
 		for (Movie movie : moviesList) {
 			myMoviesMap.put(movie.getMovieId(), movie);
 
-			// To check the dplicates later
+			// To check the duplicates later
 			myMovieNamesSet.add(movie.getMovieName());
 
 			String[] splits = movie.getGenreIdsStr().split(" ");
@@ -170,6 +180,7 @@ public class RecommendationManager {
 	private class Recommendation {
 		public Movie movie;
 		public long score = 0L;
+		public String fbUrl;
 	}
 
 	private AtomicInteger movieCount = new AtomicInteger(0);
@@ -190,7 +201,7 @@ public class RecommendationManager {
 		try {
 			friendsMoviesConn = fbClient.fetchConnection(friend.getId()
 					+ "/movies", Page.class,
-					Parameter.with("fields", "id,name"));
+					Parameter.with("fields", "id,name,link"));
 		} catch (FacebookNetworkException e) {
 			/*
 			 * The proxy server returns 403 forbidden error if this is removed.
@@ -207,9 +218,11 @@ public class RecommendationManager {
 			return recosMapForFriend(friend, commonPageFriendsMap);
 		}
 
+		Map<String, String> urlMap = new HashMap<String, String>();
 		List<String> friendMovieNamesList = new ArrayList<String>();
 		for (Page friendMoviePage : friendsMoviesConn.getData()) {
 			friendMovieNamesList.add(friendMoviePage.getName());
+			urlMap.put(friendMoviePage.getName(), friendMoviePage.getLink());
 		}
 
 		List<Movie> friendMoviesList = MovieManager.getInstance()
@@ -228,6 +241,7 @@ public class RecommendationManager {
 				continue;
 
 			Recommendation reco = new Recommendation();
+			reco.fbUrl = urlMap.get(movie.getMovieName());
 			reco.movie = movie;
 
 			Recommendation oldRecommendation = movieRecommendationMap

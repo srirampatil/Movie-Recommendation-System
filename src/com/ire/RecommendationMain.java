@@ -14,6 +14,8 @@ public class RecommendationMain {
 		System.setProperty("http.proxyPort", "8080");
 		
 		MovieManager.getInstance();
+		
+		long time = System.currentTimeMillis();
 		RecommendationManager rManager = new RecommendationManager();
 		
 		List<String> movieList = rManager.buildRecommendationsList(25);
@@ -21,5 +23,7 @@ public class RecommendationMain {
 		for (String movieName : movieList) {
 			System.out.println(movieName);
 		}
+		
+		System.out.println((System.currentTimeMillis() - time) / 1000.0);
 	}
 }
