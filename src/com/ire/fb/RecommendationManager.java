@@ -38,7 +38,7 @@ public class RecommendationManager {
 	 * Copy and paste the access token from developers.facebook.com graph
 	 * explorer It get invalidated after every half hour or so. :D
 	 */
-	private static final String MY_ACCESS_TOKEN = "CAACEdEose0cBAEVatWb23lc2MC64zSeXBBcGaKBSVNNHJinapMk4vLfbG3DRzPE2fdLLkKX3DFu34WqOO63G5wG1dcbaridjhtZB9cooygf01UgQfxTq2gJfwqjgNzJkNgUZBcZCGwu4ZACM4RxVDXC5Rgs1qCEUZAKIyHPWWznDFd7DGZAXfLAjEr9tD52eQZD";
+	private static final String MY_ACCESS_TOKEN = "CAACEdEose0cBAN36gf4kRzicB5ALipgratxMm6UrEUzN8BUV7OsylQ4sDjXFzD8jXOw8nUocgDIjUJzL1M1OhTGmFKIQgMd6KRbdVWniMMegGiWWpgM0vRUxtMjefY17ojxZBvJpdBXaxxlZB02yzVQbOqjNcBNWgXXJHxIBQXf5xYZBOJL3priBb9SEe4ZD";
 
 	private FacebookClient fbClient = null;
 	private User user = null;
@@ -112,6 +112,13 @@ public class RecommendationManager {
 			}
 		}
 
+		// If there are not common likes among friends then consider all the
+		// friends.
+		if (commonPageFriendsMap.isEmpty()) {
+			for (String key : friendsMap.keySet())
+				commonPageFriendsMap.put(key, 1);
+		}
+
 		Map<Long, Recommendation> movieRecoMap = recommendFromFriends(commonPageFriendsMap);
 		List<Recommendation> recoList = new ArrayList<RecommendationManager.Recommendation>(
 				movieRecoMap.values());
@@ -140,19 +147,20 @@ public class RecommendationManager {
 	private synchronized List<Page> parseMovies(String jsonString,
 			JsonMapper mapper) {
 		/* Fetching user liked movies list */
-		List<Page> moviePageList = new ArrayList<Page>(mapper.toJavaList(jsonString, Page.class));
+		List<Page> moviePageList = new ArrayList<Page>(mapper.toJavaList(
+				jsonString, Page.class));
 
 		/* Used set here so that duplicate names will not appear */
 		Set<String> movieNamesSet = new HashSet<String>();
 		Iterator<Page> pageIt = moviePageList.iterator();
-		while(pageIt.hasNext()) {
+		while (pageIt.hasNext()) {
 			Page page = pageIt.next();
-			if(!movieNamesSet.add(page.getName()))
+			if (!movieNamesSet.add(page.getName()))
 				pageIt.remove();
 		}
 
-		List<Movie> movieObjectsList = MovieManager.getInstance().getMoviesByNameIn(
-				new ArrayList(movieNamesSet));
+		List<Movie> movieObjectsList = MovieManager.getInstance()
+				.getMoviesByNameIn(new ArrayList(movieNamesSet));
 
 		// If there are multiple movies with the same name all will be
 		// considered. :(
@@ -261,15 +269,16 @@ public class RecommendationManager {
 			// If this friend and user has a few number of common
 			// likes
 			// give it some more weight
-			reco.score += (numberOfCommonLikes * 5L + 10L);
+			reco.score += (numberOfCommonLikes * 5L);
 
 			// Adding weight if the movie belongs to a genre
 			// of movies that user likes
 			if (movie.genreSet != null) {
 				movie.genreSet.retainAll(genreToCountMap.keySet());
 				if (!movie.genreSet.isEmpty()) {
-					for (Long genreId : movie.genreSet)
-						reco.score += (10L * genreToCountMap.get(genreId));
+					/* for (Long genreId : movie.genreSet)
+						reco.score += (10L * genreToCountMap.get(genreId)); */
+					reco.score += (5L * movie.genreSet.size());
 				}
 			}
 
@@ -298,7 +307,7 @@ public class RecommendationManager {
 
 		final Lock lock = new ReentrantLock();
 
-		for (final String friendId : friendsMap.keySet()) {
+		for (final String friendId : commonPageFriendsMap.keySet()) {
 
 			Thread t = new Thread(new Runnable() {
 				final User friend = friendsMap.get(friendId);
