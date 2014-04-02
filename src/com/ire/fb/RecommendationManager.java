@@ -38,7 +38,7 @@ public class RecommendationManager {
 	 * Copy and paste the access token from developers.facebook.com graph
 	 * explorer It get invalidated after every half hour or so. :D
 	 */
-	private static final String MY_ACCESS_TOKEN = "CAACEdEose0cBAN36gf4kRzicB5ALipgratxMm6UrEUzN8BUV7OsylQ4sDjXFzD8jXOw8nUocgDIjUJzL1M1OhTGmFKIQgMd6KRbdVWniMMegGiWWpgM0vRUxtMjefY17ojxZBvJpdBXaxxlZB02yzVQbOqjNcBNWgXXJHxIBQXf5xYZBOJL3priBb9SEe4ZD";
+	private static String MY_ACCESS_TOKEN;
 
 	private FacebookClient fbClient = null;
 	private User user = null;
@@ -56,8 +56,15 @@ public class RecommendationManager {
 		@Facebook
 		public String uid;
 	}
+	
+	public static class FBMovie {
+		public String name;
+		public String link;
+	}
 
-	public RecommendationManager() {
+	public RecommendationManager(String token) {
+		MY_ACCESS_TOKEN = token;
+		
 		fbClient = new DefaultFacebookClient(
 				RecommendationManager.MY_ACCESS_TOKEN);
 		myMovieNamesSet = new HashSet<String>();
@@ -276,9 +283,9 @@ public class RecommendationManager {
 			if (movie.genreSet != null) {
 				movie.genreSet.retainAll(genreToCountMap.keySet());
 				if (!movie.genreSet.isEmpty()) {
-					/* for (Long genreId : movie.genreSet)
-						reco.score += (10L * genreToCountMap.get(genreId)); */
-					reco.score += (5L * movie.genreSet.size());
+					for (Long genreId : movie.genreSet)
+						reco.score += (10L * genreToCountMap.get(genreId));
+//					reco.score += (5L * movie.genreSet.size());
 				}
 			}
 
