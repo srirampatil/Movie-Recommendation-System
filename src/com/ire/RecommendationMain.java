@@ -2,9 +2,10 @@ package com.ire;
 
 import java.util.List;
 
-import com.ire.db.Movie;
 import com.ire.db.MovieManager;
 import com.ire.fb.RecommendationManager;
+import com.ire.fb.RecommendationManager.FBMovie;
+import com.ire.fb.RecommendationManager.FBMovie;
 
 public class RecommendationMain {
 	public static void main(String[] args) {
@@ -17,13 +18,12 @@ public class RecommendationMain {
 
 		long time = System.currentTimeMillis();
 		RecommendationManager rManager = new RecommendationManager(
-				"CAACEdEose0cBAKer0uMk6OR3gxXkiDPgsApb1BhL4J4T3yEmgZC56557ZBqDDET0rxdZCSVziRZBvG9Es7NSwyXSdkAUelbvOOmlZCN41l0uG8gAf1verZAHlKRMqNswW1vjSvyPUOzEugeiFg3bU2gwMTtKGijNUUofGREyEt5S0DQuw4H11oqJ3fYbmY7QUzOk4DjtzC7AZDZD");
+				"CAACEdEose0cBAJSNjZCDqksULs2ttH17Te8fEV1ux03TMGZConjCnub4oRtrRoG4zsuD8O8DaFWvv2S8bQ9r6ttDUK2LM2Fx0P94YPApIM8mkLlfRDiXsrvfbC8j7k28maGBwpXFsRGSMvPIyNiZAzUhBdHbvfszmUIBsukEaNJfctB67Mkk8WXH52Vy6cZD");
 
-		List<String> movieList = rManager.buildRecommendationsList(25);
+		List<FBMovie> movieList = rManager.buildRecommendationsList(25);
 		System.out.println("**********************************");
-		for (String movieName : movieList) {
-			System.out.println(movieName);
-		}
+		for (FBMovie movie : movieList)
+			System.out.println(movie.name + " (" + movie.link + ")");
 
 		System.out.println((System.currentTimeMillis() - time) / 1000.0);
 	}

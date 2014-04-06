@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.ire.fb.RecommendationManager;
+import com.ire.fb.RecommendationManager.FBMovie;
 import com.restfb.DefaultJsonMapper;
 import com.restfb.JsonMapper;
 
@@ -24,10 +25,10 @@ public class RecommendationServer {
 		System.setProperty("https.proxyPort", "8080");
 		System.setProperty("http.proxyHost", "proxy.iiit.ac.in");
 		System.setProperty("http.proxyPort", "8080");
-		
+
 		final Configuration config = new Configuration();
 		config.setClassForTemplateLoading(RecommendationServer.class, "/");
-		
+
 		Spark.get(new Route("/:access_token") {
 
 			@Override
@@ -36,21 +37,22 @@ public class RecommendationServer {
 
 				RecommendationManager rManager = new RecommendationManager(
 						accessToken);
-				List<String> movieList = rManager.buildRecommendationsList(25);
-				
+				List<FBMovie> movieList = (List<FBMovie>) rManager
+						.buildRecommendationsList(25);
+
 				StringWriter writer = new StringWriter();
 				try {
 					Map<String, Object> moviesMap = new HashMap<String, Object>();
 					moviesMap.put("movies", movieList);
 					Template template = config.getTemplate("movies.ftl");
 					template.process(moviesMap, writer);
-					
+
 				} catch (IOException e) {
 					e.printStackTrace();
 				} catch (TemplateException e) {
 					e.printStackTrace();
 				}
-				
+
 				return writer;
 			}
 		});
